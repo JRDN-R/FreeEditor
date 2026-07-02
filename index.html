@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Full Screen Text Editor</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      min-height: 58px;
+      padding: 10px;
+      background: #1f1f1f;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid #333;
+      flex-wrap: wrap;
+    }
+
+    input,
+    button {
+      height: 36px;
+      border: none;
+      border-radius: 6px;
+      padding: 0 10px;
+      font-size: 14px;
+    }
+
+    input {
+      background: #fff;
+      color: #111;
+    }
+
+    #fileName {
+      width: 180px;
+    }
+
+    #fileType {
+      width: 150px;
+    }
+
+    button {
+      background: #4a90e2;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #357abd;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      padding: 18px;
+      font-size: 16px;
+      line-height: 1.5;
+      background: #181818;
+      color: #f5f5f5;
+      font-family: Consolas, Monaco, monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <input id="fileName" type="text" placeholder="File name" value="my-file" />
+
+    <input
+      id="fileType"
+      list="fileTypes"
+      type="text"
+      placeholder=".txt, .html, .anything"
+      value=".txt"
+    />
+
+    <datalist id="fileTypes">
+      <option value=".txt"></option>
+      <option value=".json"></option>
+      <option value=".html"></option>
+      <option value=".css"></option>
+      <option value=".js"></option>
+      <option value=".java"></option>
+      <option value=".md"></option>
+      <option value=".xml"></option>
+      <option value=".csv"></option>
+      <option value=".py"></option>
+      <option value=".cpp"></option>
+      <option value=".c"></option>
+      <option value=".php"></option>
+      <option value=".sql"></option>
+      <option value=".log"></option>
+    </datalist>
+
+    <button onclick="exportFile()">Export</button>
+  </header>
+
+  <textarea id="editor" placeholder="Start typing here..."></textarea>
+
+  <script>
+    function exportFile() {
+      const editor = document.getElementById("editor");
+      const fileNameInput = document.getElementById("fileName");
+      const fileTypeInput = document.getElementById("fileType");
+
+      const content = editor.value;
+
+      let fileName = fileNameInput.value.trim();
+      let fileType = fileTypeInput.value.trim();
+
+      if (!fileName) {
+        fileName = "untitled";
+      }
+
+      if (!fileType) {
+        fileType = ".txt";
+      }
+
+      // Adds the dot if the user types txt instead of .txt
+      if (!fileType.startsWith(".")) {
+        fileType = "." + fileType;
+      }
+
+      // Prevents weird spaces in the extension
+      fileType = fileType.replace(/\s+/g, "");
+
+      // Removes an old extension from the file name if needed
+      fileName = fileName.replace(/\.[^/.]+$/, "");
+
+      const finalFileName = fileName + fileType;
+
+      const mimeTypes = {
+        ".txt": "text/plain",
+        ".json": "application/json",
+        ".html": "text/html",
+        ".css": "text/css",
+        ".js": "text/javascript",
+        ".java": "text/x-java-source",
+        ".md": "text/markdown",
+        ".xml": "application/xml",
+        ".csv": "text/csv",
+        ".py": "text/x-python",
+        ".cpp": "text/x-c++src",
+        ".c": "text/x-csrc",
+        ".php": "application/x-httpd-php",
+        ".sql": "application/sql",
+        ".log": "text/plain"
+      };
+
+      const blob = new Blob([content], {
+        type: mimeTypes[fileType.toLowerCase()] || "text/plain"
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const downloadLink = document.createElement("a");
+      downloadLink.href = url;
+      downloadLink.download = finalFileName;
+
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
