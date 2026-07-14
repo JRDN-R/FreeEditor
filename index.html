@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1f1f1f" />
   <title>FreeEditor</title>
 
   <style>
@@ -10,9 +11,15 @@
       box-sizing: border-box;
     }
 
+    html,
     body {
       margin: 0;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
       font-family: Arial, sans-serif;
       background: #111;
       color: #fff;
@@ -21,6 +28,7 @@
     }
 
     header {
+      flex: 0 0 auto;
       min-height: 58px;
       padding: 10px;
       background: #1f1f1f;
@@ -33,14 +41,14 @@
 
     input,
     button {
-      height: 36px;
+      height: 38px;
       border: none;
       border-radius: 6px;
-      padding: 0 10px;
+      padding: 0 12px;
       font-size: 14px;
     }
 
-    input {
+    input[type="text"] {
       background: #fff;
       color: #111;
     }
@@ -50,38 +58,58 @@
     }
 
     #fileType {
-      width: 150px;
-    }
-
-    button {
-      background: #4a90e2;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    button:hover {
-      background: #357abd;
-    }
-
-    button:active {
-      transform: translateY(1px);
+      width: 145px;
     }
 
     #uploadFile {
       display: none;
     }
 
-    #status {
-      min-height: 20px;
-      margin-left: auto;
-      color: #bdbdbd;
-      font-size: 13px;
-      line-height: 20px;
+    button {
+      background: #4a90e2;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+      touch-action: manipulation;
     }
 
-    textarea {
-      flex: 1;
+    button:hover,
+    button:focus-visible {
+      background: #357abd;
+    }
+
+    #uploadButton {
+      background: #2f9e5b;
+    }
+
+    #uploadButton:hover,
+    #uploadButton:focus-visible {
+      background: #267f49;
+    }
+
+    #copyButton {
+      background: #7257c7;
+    }
+
+    #copyButton:hover,
+    #copyButton:focus-visible {
+      background: #5e45aa;
+    }
+
+    #status {
+      min-width: 0;
+      margin-left: auto;
+      color: #cfcfcf;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #editor {
+      flex: 1 1 auto;
+      min-height: 0;
       width: 100%;
       resize: none;
       border: none;
@@ -97,7 +125,20 @@
       overflow: auto;
     }
 
-    @media (max-width: 700px) {
+    @media (max-width: 760px) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      body {
+        min-height: 100%;
+      }
+
+      header {
+        align-items: stretch;
+      }
+
       #fileName,
       #fileType {
         flex: 1 1 140px;
@@ -105,9 +146,19 @@
         min-width: 0;
       }
 
+      button {
+        flex: 1 1 auto;
+      }
+
       #status {
+        flex-basis: 100%;
         width: 100%;
         margin-left: 0;
+      }
+
+      #editor {
+        min-height: 65vh;
+        font-size: 16px;
       }
     }
   </style>
@@ -115,7 +166,7 @@
 
 <body>
   <header>
-    <input id="fileName" type="text" placeholder="File name" value="my-file" />
+    <input id="fileName" type="text" placeholder="File name" value="my-file" aria-label="File name" />
 
     <input
       id="fileType"
@@ -123,6 +174,7 @@
       type="text"
       placeholder=".txt, .html, .anything"
       value=".txt"
+      aria-label="File extension"
     />
 
     <datalist id="fileTypes">
@@ -149,36 +201,90 @@
       <option value=".docx"></option>
     </datalist>
 
-    <input id="uploadFile" type="file" />
-    <button type="button" onclick="openFilePicker()">Upload File</button>
-    <button id="copyButton" type="button" onclick="copyEditorText()">Copy Text</button>
-    <button type="button" onclick="exportFile()">Export</button>
+    <input id="uploadFile" type="file" accept="*/*" />
+    <button id="uploadButton" type="button">Upload File</button>
+    <button id="copyButton" type="button">Copy All</button>
+    <button id="exportButton" type="button">Export</button>
 
-    <span id="status" aria-live="polite"></span>
+    <span id="status" role="status" aria-live="polite">Ready</span>
   </header>
 
   <textarea
     id="editor"
-    placeholder="Start typing here or upload a file..."
+    placeholder="Start typing here or upload a text/code file..."
     spellcheck="false"
+    autocapitalize="off"
+    autocomplete="off"
+    autocorrect="off"
   ></textarea>
 
   <script>
+    "use strict";
+
     const editor = document.getElementById("editor");
     const fileNameInput = document.getElementById("fileName");
     const fileTypeInput = document.getElementById("fileType");
     const uploadFileInput = document.getElementById("uploadFile");
+    const uploadButton = document.getElementById("uploadButton");
     const copyButton = document.getElementById("copyButton");
+    const exportButton = document.getElementById("exportButton");
     const statusText = document.getElementById("status");
 
     function setStatus(message) {
       statusText.textContent = message;
     }
 
-    function openFilePicker() {
+    function splitFileName(fullName) {
+      const lastDot = fullName.lastIndexOf(".");
+
+      if (lastDot > 0) {
+        return {
+          name: fullName.slice(0, lastDot),
+          extension: fullName.slice(lastDot)
+        };
+      }
+
+      return {
+        name: fullName || "untitled",
+        extension: ".txt"
+      };
+    }
+
+    function decodeFile(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let encoding = "utf-8";
+      let offset = 0;
+
+      if (
+        bytes.length >= 3 &&
+        bytes[0] === 0xef &&
+        bytes[1] === 0xbb &&
+        bytes[2] === 0xbf
+      ) {
+        offset = 3;
+      } else if (
+        bytes.length >= 2 &&
+        bytes[0] === 0xff &&
+        bytes[1] === 0xfe
+      ) {
+        encoding = "utf-16le";
+        offset = 2;
+      } else if (
+        bytes.length >= 2 &&
+        bytes[0] === 0xfe &&
+        bytes[1] === 0xff
+      ) {
+        encoding = "utf-16be";
+        offset = 2;
+      }
+
+      return new TextDecoder(encoding).decode(bytes.subarray(offset));
+    }
+
+    uploadButton.addEventListener("click", function () {
       uploadFileInput.value = "";
       uploadFileInput.click();
-    }
+    });
 
     uploadFileInput.addEventListener("change", async function () {
       const file = uploadFileInput.files && uploadFileInput.files[0];
@@ -191,53 +297,36 @@
         setStatus("Loading " + file.name + "...");
 
         const buffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        let encoding = "utf-8";
-        let offset = 0;
+        const text = decodeFile(buffer);
+        const parts = splitFileName(file.name);
 
-        // Detect common byte-order marks so UTF-8 and UTF-16 text files load correctly.
-        if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-          encoding = "utf-8";
-          offset = 3;
-        } else if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-          encoding = "utf-16le";
-          offset = 2;
-        } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-          encoding = "utf-16be";
-          offset = 2;
-        }
-
-        const text = new TextDecoder(encoding).decode(bytes.subarray(offset));
         editor.value = text;
+        fileNameInput.value = parts.name;
+        fileTypeInput.value = parts.extension;
 
-        const lastDot = file.name.lastIndexOf(".");
-
-        if (lastDot > 0) {
-          fileNameInput.value = file.name.substring(0, lastDot);
-          fileTypeInput.value = file.name.substring(lastDot);
-        } else {
-          fileNameInput.value = file.name;
-          fileTypeInput.value = ".txt";
-        }
-
-        const appearsBinary = text.includes("\u0000") || (text.match(/\uFFFD/g) || []).length > 5;
+        const replacementCharacters = (text.match(/\uFFFD/g) || []).length;
+        const appearsBinary = text.includes("\u0000") || replacementCharacters > 5;
 
         if (appearsBinary) {
-          setStatus("Loaded " + file.name + ". This appears to be a binary file, so some text may not display correctly.");
+          setStatus(
+            "Loaded " + file.name + ". This appears to be binary, so its readable text may be limited."
+          );
         } else {
-          setStatus("Loaded " + file.name + " (" + text.length.toLocaleString() + " characters).");
+          setStatus(
+            "Loaded " + file.name + " (" + text.length.toLocaleString() + " characters)"
+          );
         }
 
         editor.focus();
         editor.setSelectionRange(0, 0);
       } catch (error) {
         console.error(error);
-        setStatus("Could not read the selected file.");
+        setStatus("Could not read the selected file");
         alert("The selected file could not be read.");
       }
     });
 
-    async function copyEditorText() {
+    copyButton.addEventListener("click", async function () {
       const content = editor.value;
 
       try {
@@ -248,39 +337,27 @@
           editor.select();
 
           if (!document.execCommand("copy")) {
-            throw new Error("Copy command failed.");
+            throw new Error("Copy command failed");
           }
         }
 
-        const originalText = copyButton.textContent;
         copyButton.textContent = "Copied!";
-        setStatus("Editor text copied to the clipboard.");
+        setStatus("All editor text copied");
 
         window.setTimeout(function () {
-          copyButton.textContent = originalText;
+          copyButton.textContent = "Copy All";
         }, 1400);
       } catch (error) {
         console.error(error);
-        setStatus("Copy failed. Select the editor text and copy it manually.");
+        setStatus("Copy failed. Select the text and copy it manually.");
         alert("Copy failed. Select the editor text and copy it manually.");
       }
-    }
+    });
 
-    function exportFile() {
-      const content = editor.value;
+    exportButton.addEventListener("click", function () {
+      let fileName = fileNameInput.value.trim() || "untitled";
+      let fileType = fileTypeInput.value.trim() || ".txt";
 
-      let fileName = fileNameInput.value.trim();
-      let fileType = fileTypeInput.value.trim();
-
-      if (!fileName) {
-        fileName = "untitled";
-      }
-
-      if (!fileType) {
-        fileType = ".txt";
-      }
-
-      // Add the dot if the user types txt instead of .txt.
       if (!fileType.startsWith(".")) {
         fileType = "." + fileType;
       }
@@ -289,31 +366,24 @@
       fileName = fileName.replace(/\.[^/.]+$/, "");
 
       const finalFileName = fileName + fileType;
-
       const mimeTypes = {
-        ".txt": "text/plain",
-        ".json": "application/json",
-        ".html": "text/html",
-        ".hta": "application/hta",
-        ".css": "text/css",
-        ".js": "text/javascript",
-        ".cmd": "text/plain",
-        ".bat": "text/plain",
-        ".ps1": "text/plain",
-        ".java": "text/x-java-source",
-        ".md": "text/markdown",
-        ".xml": "application/xml",
-        ".csv": "text/csv",
-        ".py": "text/x-python",
-        ".cpp": "text/x-c++src",
-        ".c": "text/x-csrc",
-        ".php": "application/x-httpd-php",
-        ".sql": "application/sql",
-        ".log": "text/plain"
+        ".txt": "text/plain;charset=utf-8",
+        ".html": "text/html;charset=utf-8",
+        ".hta": "text/html;charset=utf-8",
+        ".css": "text/css;charset=utf-8",
+        ".js": "text/javascript;charset=utf-8",
+        ".json": "application/json;charset=utf-8",
+        ".cmd": "text/plain;charset=utf-8",
+        ".bat": "text/plain;charset=utf-8",
+        ".ps1": "text/plain;charset=utf-8",
+        ".py": "text/x-python;charset=utf-8",
+        ".md": "text/markdown;charset=utf-8",
+        ".xml": "application/xml;charset=utf-8",
+        ".csv": "text/csv;charset=utf-8"
       };
 
-      const blob = new Blob([content], {
-        type: mimeTypes[fileType.toLowerCase()] || "text/plain"
+      const blob = new Blob([editor.value], {
+        type: mimeTypes[fileType.toLowerCase()] || "text/plain;charset=utf-8"
       });
 
       const url = URL.createObjectURL(blob);
@@ -321,14 +391,30 @@
 
       downloadLink.href = url;
       downloadLink.download = finalFileName;
-
       document.body.appendChild(downloadLink);
       downloadLink.click();
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(url);
+      downloadLink.remove();
 
-      setStatus("Exported " + finalFileName + ".");
-    }
+      window.setTimeout(function () {
+        URL.revokeObjectURL(url);
+      }, 1000);
+
+      setStatus("Exported " + finalFileName);
+    });
+
+    editor.addEventListener("keydown", function (event) {
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      event.preventDefault();
+
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const tab = "  ";
+
+      editor.setRangeText(tab, start, end, "end");
+    });
   </script>
 </body>
 </html>
