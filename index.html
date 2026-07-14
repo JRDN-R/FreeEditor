@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Full Screen Text Editor</title>
+  <title>FreeEditor</title>
 
   <style>
     * {
@@ -64,6 +64,22 @@
       background: #357abd;
     }
 
+    button:active {
+      transform: translateY(1px);
+    }
+
+    #uploadFile {
+      display: none;
+    }
+
+    #status {
+      min-height: 20px;
+      margin-left: auto;
+      color: #bdbdbd;
+      font-size: 13px;
+      line-height: 20px;
+    }
+
     textarea {
       flex: 1;
       width: 100%;
@@ -75,7 +91,24 @@
       line-height: 1.5;
       background: #181818;
       color: #f5f5f5;
-      font-family: Consolas, Monaco, monospace;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      tab-size: 2;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    @media (max-width: 700px) {
+      #fileName,
+      #fileType {
+        flex: 1 1 140px;
+        width: auto;
+        min-width: 0;
+      }
+
+      #status {
+        width: 100%;
+        margin-left: 0;
+      }
     }
   </style>
 </head>
@@ -94,33 +127,146 @@
 
     <datalist id="fileTypes">
       <option value=".txt"></option>
-      <option value=".json"></option>
       <option value=".html"></option>
+      <option value=".hta"></option>
       <option value=".css"></option>
       <option value=".js"></option>
+      <option value=".json"></option>
+      <option value=".cmd"></option>
+      <option value=".bat"></option>
+      <option value=".ps1"></option>
+      <option value=".py"></option>
       <option value=".java"></option>
       <option value=".md"></option>
       <option value=".xml"></option>
       <option value=".csv"></option>
-      <option value=".py"></option>
       <option value=".cpp"></option>
       <option value=".c"></option>
       <option value=".php"></option>
       <option value=".sql"></option>
       <option value=".log"></option>
+      <option value=".doc"></option>
+      <option value=".docx"></option>
     </datalist>
 
-    <button onclick="exportFile()">Export</button>
+    <input id="uploadFile" type="file" />
+    <button type="button" onclick="openFilePicker()">Upload File</button>
+    <button id="copyButton" type="button" onclick="copyEditorText()">Copy Text</button>
+    <button type="button" onclick="exportFile()">Export</button>
+
+    <span id="status" aria-live="polite"></span>
   </header>
 
-  <textarea id="editor" placeholder="Start typing here..."></textarea>
+  <textarea
+    id="editor"
+    placeholder="Start typing here or upload a file..."
+    spellcheck="false"
+  ></textarea>
 
   <script>
-    function exportFile() {
-      const editor = document.getElementById("editor");
-      const fileNameInput = document.getElementById("fileName");
-      const fileTypeInput = document.getElementById("fileType");
+    const editor = document.getElementById("editor");
+    const fileNameInput = document.getElementById("fileName");
+    const fileTypeInput = document.getElementById("fileType");
+    const uploadFileInput = document.getElementById("uploadFile");
+    const copyButton = document.getElementById("copyButton");
+    const statusText = document.getElementById("status");
 
+    function setStatus(message) {
+      statusText.textContent = message;
+    }
+
+    function openFilePicker() {
+      uploadFileInput.value = "";
+      uploadFileInput.click();
+    }
+
+    uploadFileInput.addEventListener("change", async function () {
+      const file = uploadFileInput.files && uploadFileInput.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      try {
+        setStatus("Loading " + file.name + "...");
+
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let encoding = "utf-8";
+        let offset = 0;
+
+        // Detect common byte-order marks so UTF-8 and UTF-16 text files load correctly.
+        if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+          encoding = "utf-8";
+          offset = 3;
+        } else if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+          encoding = "utf-16le";
+          offset = 2;
+        } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+          encoding = "utf-16be";
+          offset = 2;
+        }
+
+        const text = new TextDecoder(encoding).decode(bytes.subarray(offset));
+        editor.value = text;
+
+        const lastDot = file.name.lastIndexOf(".");
+
+        if (lastDot > 0) {
+          fileNameInput.value = file.name.substring(0, lastDot);
+          fileTypeInput.value = file.name.substring(lastDot);
+        } else {
+          fileNameInput.value = file.name;
+          fileTypeInput.value = ".txt";
+        }
+
+        const appearsBinary = text.includes("\u0000") || (text.match(/\uFFFD/g) || []).length > 5;
+
+        if (appearsBinary) {
+          setStatus("Loaded " + file.name + ". This appears to be a binary file, so some text may not display correctly.");
+        } else {
+          setStatus("Loaded " + file.name + " (" + text.length.toLocaleString() + " characters).");
+        }
+
+        editor.focus();
+        editor.setSelectionRange(0, 0);
+      } catch (error) {
+        console.error(error);
+        setStatus("Could not read the selected file.");
+        alert("The selected file could not be read.");
+      }
+    });
+
+    async function copyEditorText() {
+      const content = editor.value;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(content);
+        } else {
+          editor.focus();
+          editor.select();
+
+          if (!document.execCommand("copy")) {
+            throw new Error("Copy command failed.");
+          }
+        }
+
+        const originalText = copyButton.textContent;
+        copyButton.textContent = "Copied!";
+        setStatus("Editor text copied to the clipboard.");
+
+        window.setTimeout(function () {
+          copyButton.textContent = originalText;
+        }, 1400);
+      } catch (error) {
+        console.error(error);
+        setStatus("Copy failed. Select the editor text and copy it manually.");
+        alert("Copy failed. Select the editor text and copy it manually.");
+      }
+    }
+
+    function exportFile() {
       const content = editor.value;
 
       let fileName = fileNameInput.value.trim();
@@ -134,15 +280,12 @@
         fileType = ".txt";
       }
 
-      // Adds the dot if the user types txt instead of .txt
+      // Add the dot if the user types txt instead of .txt.
       if (!fileType.startsWith(".")) {
         fileType = "." + fileType;
       }
 
-      // Prevents weird spaces in the extension
       fileType = fileType.replace(/\s+/g, "");
-
-      // Removes an old extension from the file name if needed
       fileName = fileName.replace(/\.[^/.]+$/, "");
 
       const finalFileName = fileName + fileType;
@@ -151,8 +294,12 @@
         ".txt": "text/plain",
         ".json": "application/json",
         ".html": "text/html",
+        ".hta": "application/hta",
         ".css": "text/css",
         ".js": "text/javascript",
+        ".cmd": "text/plain",
+        ".bat": "text/plain",
+        ".ps1": "text/plain",
         ".java": "text/x-java-source",
         ".md": "text/markdown",
         ".xml": "application/xml",
@@ -170,16 +317,17 @@
       });
 
       const url = URL.createObjectURL(blob);
-
       const downloadLink = document.createElement("a");
+
       downloadLink.href = url;
       downloadLink.download = finalFileName;
 
       document.body.appendChild(downloadLink);
       downloadLink.click();
-
       document.body.removeChild(downloadLink);
       URL.revokeObjectURL(url);
+
+      setStatus("Exported " + finalFileName + ".");
     }
   </script>
 </body>
